@@ -1,0 +1,52 @@
+The results suggest that remote work may increase productivity,
+although the effect varies across sectors.
+
+---
+This sentence fragments into THREE SemanticUnits (WP2 §3.2 example):
+
+u1: results → suggest → [remote work increases productivity]
+u2: remote work → may_increase → productivity
+u3: effect → varies_across → sectors
+
+---
+u1 — Evidential claim (E2: multi-emission)
+
+  SemanticProjection:
+    subject_candidates: ["results"]
+    object_candidates: ["remote work increases productivity"]
+    P_r: {suggests: 0.80, indicates: 0.15, supports: 0.05}
+    h_norm: ~0.558  (in [τ₂, τ₃) → E2 face region)
+
+  Emission: E2 (k=3)
+    rank=1: subject=results  relation=suggests  object=remote work increases productivity  score=0.80
+    rank=2: subject=results  relation=indicates object=remote work increases productivity  score=0.15
+    rank=3: subject=results  relation=supports  object=remote work increases productivity  score=0.05
+
+---
+u2 — Modal assertion (E1: singular)
+
+  SemanticProjection:
+    subject_candidates: ["remote work"]
+    object_candidates: ["productivity"]
+    P_r: {may_increase: 0.97, correlates_with: 0.03}
+    h_norm: ~0.194  (< τ₂=0.25 → E1 vertex neighbourhood)
+
+  Emission: E1
+    rank=1: subject=remote work  relation=may_increase  object=productivity  score=0.97
+
+---
+u3 — Statistical variation (E2: multi-emission)
+
+  SemanticProjection:
+    subject_candidates: ["effect"]
+    object_candidates: ["sectors"]
+    P_r: {varies_across: 0.75, depends_on: 0.20, correlates_with: 0.05}
+    h_norm: ~0.625  (in [τ₂, τ₃) → E2 face region)
+
+  Emission: E2 (k=3)
+    rank=1: subject=effect  relation=varies_across  object=sectors  score=0.75
+    rank=2: subject=effect  relation=depends_on     object=sectors  score=0.20
+    rank=3: subject=effect  relation=correlates_with object=sectors score=0.05
+
+---
+Total: 7 ClaimCandidates → 7 ClaimNodes (all READY_FOR_CLAIM)
