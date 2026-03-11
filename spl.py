@@ -574,19 +574,10 @@ class ClaimCandidateConverter:
         """
         Convert a ClaimCandidate to a ClaimNode.
 
-        The resulting ClaimNode has:
-        - subject, predicate (=relation), object from candidate
-        - category derived from semantic_category_hint (hint → enum)
-        - modality derived from modality_hint (hint → enum)
-        - source_refs including spl_provenance record
-        - assumptions from extra_assumptions + auto-generated SPL assumption
-        - status = UNVALIDATED (must go through AuditGate)
-        - builder_origin from candidate.builder_origin
-
         Raises ValueError if candidate.emission_rule not in {E1, E2}.
         BRANCH_CANDIDATE and AMBIGUOUS must never be converted directly.
         """
-        from .schema import ClaimNode, Category, Modality, BuilderOrigin, EpistemicStatus
+        from .schema import ClaimNode, BuilderOrigin
 
         if candidate.emission_rule not in (EmissionRule.E1, EmissionRule.E2):
             raise ValueError(
@@ -595,47 +586,11 @@ class ClaimCandidateConverter:
                 "Only E1/E2 (READY_FOR_CLAIM) candidates are convertible."
             )
 
-        # Category mapping (hint → protocol enum)
-        cat_value = _CATEGORY_HINT_MAP.get(
-            candidate.semantic_category_hint.lower(), "EMPIRICAL"
-        )
-        try:
-            category = Category[cat_value]
-        except KeyError:
-            category = Category.EMPIRICAL
-
-        # Modality mapping (hint → protocol enum)
-        mod_value = _MODALITY_HINT_MAP.get(
-            candidate.modality_hint.lower(), "hypothesis"
-        )
-        try:
-            modality = Modality(mod_value)
-        except ValueError:
-            modality = Modality.HYPOTHESIS
-
-        # Builder origin
-        origin = BuilderOrigin.ALPHA if candidate.builder_origin == "alpha" else BuilderOrigin.BETA
-
-        # SPL provenance — always attached to source_refs for auditability
-        spl_provenance = (
-            f"spl:{candidate.unit_id[:8]}/"
-            f"{candidate.projection_id[:8]}/"
-            f"E{candidate.emission_rule.value}/"
-            f"score={candidate.relation_score:.3f}/"
-            f"h={candidate.h_norm:.3f}/"
-            f"matrix={candidate.matrix_version}"
-        )
-        source_refs = [spl_provenance]
-
-        # Assumptions: always non-empty [SHALL]
-        assumptions = list(extra_assumptions or [])
-        assumptions.append(
-            f"SPL projection: relation={candidate.relation} "
-            f"score={candidate.relation_score:.3f} "
-            f"h_norm={candidate.h_norm:.3f}"
-        )
-        if candidate.scope_hint:
-            assumptions.append(f"scope={candidate.scope_hint}")
+        category   = self._map_category(candidate.semantic_category_hint)
+        modality   = self._map_modality(candidate.modality_hint)
+        origin     = BuilderOrigin.ALPHA if candidate.builder_origin == "alpha" else BuilderOrigin.BETA
+        source_refs = [self._build_provenance(candidate)]
+        assumptions = self._build_assumptions(candidate, extra_assumptions)
 
         claim = ClaimNode.new(
             subject=candidate.subject,
@@ -645,10 +600,54 @@ class ClaimCandidateConverter:
             assumptions=assumptions,
             source_refs=source_refs,
         )
-        claim.modality  = modality
+        claim.modality      = modality
         claim.builder_origin = origin
-
         return claim
+
+    def _map_category(self, hint: str) -> "Category":
+        """Map a semantic category hint to an Alexandria Category enum value."""
+        from .schema import Category
+        cat_value = _CATEGORY_HINT_MAP.get(hint.lower(), "EMPIRICAL")
+        try:
+            return Category[cat_value]
+        except KeyError:
+            return Category.EMPIRICAL
+
+    def _map_modality(self, hint: str) -> "Modality":
+        """Map a modality hint to an Alexandria Modality enum value."""
+        from .schema import Modality
+        mod_value = _MODALITY_HINT_MAP.get(hint.lower(), "hypothesis")
+        try:
+            return Modality(mod_value)
+        except ValueError:
+            return Modality.HYPOTHESIS
+
+    def _build_provenance(self, candidate: ClaimCandidate) -> str:
+        """Build the SPL provenance string for source_refs (WP2 §7.4)."""
+        return (
+            f"spl:{candidate.unit_id[:8]}/"
+            f"{candidate.projection_id[:8]}/"
+            f"E{candidate.emission_rule.value}/"
+            f"score={candidate.relation_score:.3f}/"
+            f"h={candidate.h_norm:.3f}/"
+            f"matrix={candidate.matrix_version}"
+        )
+
+    def _build_assumptions(
+        self,
+        candidate: ClaimCandidate,
+        extra: list[str] | None,
+    ) -> list[str]:
+        """Build the assumptions list [SHALL be non-empty]."""
+        assumptions = list(extra or [])
+        assumptions.append(
+            f"SPL projection: relation={candidate.relation} "
+            f"score={candidate.relation_score:.3f} "
+            f"h_norm={candidate.h_norm:.3f}"
+        )
+        if candidate.scope_hint:
+            assumptions.append(f"scope={candidate.scope_hint}")
+        return assumptions
 
     def convert_batch(
         self,
@@ -661,7 +660,7 @@ class ClaimCandidateConverter:
             if c.emission_rule in (EmissionRule.E1, EmissionRule.E2):
                 try:
                     claims.append(self.convert(c, extra_assumptions))
-                except (ValueError, Exception):
+                except (ValueError, KeyError, AttributeError):
                     pass
         return claims
 

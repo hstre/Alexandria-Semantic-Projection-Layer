@@ -1,0 +1,28 @@
+The compound may possibly inhibit or reduce activity in some cellular pathways
+under certain conditions.
+
+---
+Why this is ambiguous:
+
+This sentence contains multiple epistemic hedges ("may", "possibly") and
+relational alternatives ("inhibit or reduce"). The NLP backend produces
+a near-uniform P_r distribution.
+
+  SemanticUnit:
+    source_text: "compound may possibly inhibit or reduce activity"
+    fragmentation_signal: "modal:may, conjunctive:or"
+
+  SemanticProjection (NLP backend output):
+    subject_candidates: ["compound"]
+    object_candidates: ["cellular pathway activity"]
+    P_r: {inhibits: 0.28, reduces: 0.27, downregulates: 0.25, modulates: 0.20}
+    h_norm: ~0.994  (>= τ₃=0.65)
+
+  Emission: E3 (AMBIGUOUS — blocked)
+    Reason: H_norm=0.994 exceeds ambiguity threshold τ₃=0.65
+    No ClaimCandidates emitted.
+
+  Resolution options:
+    1. Human review to select correct relation
+    2. Decompose into sub-units ("may inhibit" + "or reduce")
+    3. Re-projection with more constrained context

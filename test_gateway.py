@@ -387,11 +387,13 @@ gw.to_claims(r1)
 
 log = gw.audit_log()
 events = [e["event"] for e in log]
-assert_eq("3 Log-Einträge", len(log), 3)
-assert_eq("Events: [submit, submit, to_claims]", events,
-          ["submit", "submit", "to_claims"])
+# Log now also contains gateway_event + emit_claim_nodes from to_claims()
+assert_true("Log enthält submit-Einträge",
+            events.count("submit") == 2)
+assert_true("Log enthält to_claims-Eintrag",
+            "to_claims" in events)
 
-submit_entry = log[0]
+submit_entry = next(e for e in log if e["event"] == "submit")
 required_fields = {"event", "result_id", "unit_id", "projection_id",
                    "status", "emission_rule", "h_norm",
                    "candidate_count", "builder_origin", "matrix_version", "timestamp"}
@@ -399,7 +401,7 @@ missing = required_fields - set(submit_entry.keys())
 assert_true("Alle Pflichtfelder im submit-Eintrag", len(missing) == 0,
             f"fehlend: {missing}")
 
-claim_entry = log[2]
+claim_entry = next(e for e in log if e.get("event") == "to_claims")
 assert_eq("to_claims-Eintrag hat claim_count=1",
           claim_entry["claim_count"], 1)
 

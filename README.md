@@ -9,6 +9,51 @@ Part of the [Alexandria Protocol](https://github.com/hstre/Alexandria-Protokoll)
 
 ---
 
+## Three-Layer Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│  SPL Layer (spl.py)           PROBABILISTIC         │
+│  ─────────────────────────────────────────────────  │
+│  Text → SemanticUnit → SemanticProjection           │
+│  Operates on distributions P_r over relation space  │
+│  Quantifies ambiguity (H_norm) and divergence (JSD) │
+└──────────────────────────┬──────────────────────────┘
+                           │
+               ┌───────────▼───────────┐
+               │  Gateway (spl_gateway.py)             │
+               │  ─────────────────────────────────── │
+               │  emit_claim_nodes()  ← only legal     │
+               │  path to ClaimNode                    │
+               │                                       │
+               │  Validates: emission rule, confidence, │
+               │  entropy, JSD, evidence count         │
+               │  Assigns: SHA256 claim_id             │
+               │  Logs: GatewayEvent → audit_log.json  │
+               └───────────┬───────────┘
+                           │
+┌──────────────────────────▼──────────────────────────┐
+│  Protocol Layer (schema.py)   DETERMINISTIC         │
+│  ─────────────────────────────────────────────────  │
+│  ClaimNode → ClaimGraph                             │
+│  Diff, Adjudication, Branch, Seal                   │
+│  Operates on discrete, sealed epistemic objects     │
+└─────────────────────────────────────────────────────┘
+```
+
+**SPL is probabilistic.** It operates on distributions over relation spaces and
+quantifies ambiguity and builder divergence mathematically.
+
+**The Protocol is deterministic.** It operates on discrete, sealed claim objects
+with no distributional uncertainty.
+
+**The Gateway is the boundary.** It translates from probabilistic to deterministic
+by validating each candidate against threshold criteria and assigning a
+deterministic SHA256 identity to every emitted ClaimNode. Nothing enters the
+ClaimGraph without passing through the gateway.
+
+---
+
 ## What is the SPL?
 
 The Alexandria Protocol operates on discrete, structured claim objects. But claims originate from natural language. The **Semantic Projection Layer (SPL)** is the formally defined pre-protocol stage that bridges this gap.
@@ -80,8 +125,25 @@ ClaimNode             Alexandria canonical claim
 ## Repository Contents
 
 ```
-WP2_Semantic_Projection_Layer.md    Full paper (this working paper)
-spl.py                              Reference implementation
+spl.py                              Core SPL implementation (SemanticUnit,
+                                    SemanticProjection, EmissionEngine E0–E4,
+                                    ClaimCandidateConverter)
+spl_gateway.py                      Protocol-callable interface layer
+                                    (emit_claim_nodes, hash_claim, GatewayEvent)
+WP2_Semantic_Projection_Layer.md    Full working paper (theory)
+
+tests/
+  test_entropy.py                   H_norm unit tests
+  test_jsd.py                       JSD unit tests
+  test_spl_rules.py                 Emission rules E0–E4 + end-to-end pipeline
+  test_gateway.py                   Gateway boundary tests
+
+examples/
+  simple_claim.txt                  "Paris is the capital of France." (E1)
+  ambiguous_claim.txt               Modal+conjunctive hedging → E3 block
+  multi_claim.txt                   3-unit sentence → mixed E1/E2 output
+
+audit_log.json                      GatewayEvent log (auto-generated at runtime)
 README.md                           This file
 ```
 

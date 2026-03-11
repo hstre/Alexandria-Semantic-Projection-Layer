@@ -1,0 +1,30 @@
+Paris is the capital of France.
+
+---
+Expected SPL pipeline output:
+  SemanticUnit:
+    source_text: "Paris is the capital of France."
+    fragmentation_signal: "relational:is"
+
+  SemanticProjection (NLP backend output):
+    subject_candidates: ["Paris"]
+    object_candidates: ["France"]
+    P_r: {capital_of: 0.97, located_in: 0.03}
+    builder_origin: alpha
+
+  Emission: E1 (singular)
+    relation_score: 0.97
+    h_norm: ~0.19  (< τ₂=0.25)
+
+  ClaimCandidate:
+    subject: Paris
+    relation: capital_of
+    object: France
+    rank: 1
+
+  ClaimNode:
+    subject: Paris
+    predicate: capital_of
+    object: France
+    claim_id: SHA256("paris|capital_of|france")
+    source_refs: ["spl:..."]
