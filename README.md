@@ -156,11 +156,15 @@ spl_gateway/                        THE BOUNDARY — legal protocol entry point.
                                     ClaimNode). make_gateway() factory.
 WP2_Semantic_Projection_Layer.md    Full working paper (theory)
 
+test_app.py                         Standalone theory demo — runs the full WP2
+                                    pipeline end-to-end with annotated output.
+                                    Run: python test_app.py [--verbose]
+
 tests/
   test_entropy.py                   H_norm unit tests
   test_jsd.py                       JSD unit tests
   test_spl_rules.py                 Emission rules E0–E4 + end-to-end pipeline
-  test_gateway.py                   Gateway boundary tests
+  test_gateway.py                   Gateway boundary unit tests (97 tests total)
 
 examples/
   simple_claim.txt                  "Paris is the capital of France." (E1)
