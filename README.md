@@ -12,22 +12,28 @@ Part of the [Alexandria Protocol](https://github.com/hstre/Alexandria-Protokoll)
 ## Three-Layer Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  SPL Layer (spl.py)           PROBABILISTIC         │
-│  ─────────────────────────────────────────────────  │
-│  Text → SemanticUnit → SemanticProjection           │
-│  Operates on distributions P_r over relation space  │
-│  Quantifies ambiguity (H_norm) and divergence (JSD) │
-└──────────────────────────┬──────────────────────────┘
-                           │
-               ┌───────────▼───────────┐
-               │  Gateway (spl_gateway.py)             │
-               │  ─────────────────────────────────── │
-               │  emit_claim_nodes()  ← only legal     │
-               │  path to ClaimNode                    │
-               │                                       │
-               │  Validates: emission rule, confidence, │
-               │  entropy, JSD, evidence count         │
+┌────────────────────────────────────────────────────────────┐
+│  spl.py  —  PROBABILISTIC PRE-PROTOCOL STAGE               │
+│  ────────────────────────────────────────────────────────  │
+│  Text → SemanticUnit → SemanticProjection → ClaimCandidate │
+│  Operates on distributions P_r over relation space         │
+│  Quantifies ambiguity (H_norm) and divergence (JSD)        │
+└─────────────────────────────┬──────────────────────────────┘
+                              │  ClaimCandidates (probabilistic)
+               ┌──────────────▼──────────────┐
+               │  spl_gateway.py             │
+               │  LEGAL PROTOCOL ENTRY POINT │
+               │  ─────────────────────────  │
+               │  validate_candidate_for_    │
+               │    protocol_entry()         │
+               │  ClaimCandidateConverter    │
+               │  emit_claim_nodes()  ← THE  │
+               │    ONLY legal path to       │
+               │    ClaimNode                │
+               │                             │
+               │  Validates: emission rule,  │
+               │  confidence, entropy, JSD,  │
+               │  evidence count             │
                │  Assigns: SHA256 claim_id             │
                │  Logs: GatewayEvent → audit_log.json  │
                └───────────┬───────────┘
@@ -125,11 +131,15 @@ ClaimNode             Alexandria canonical claim
 ## Repository Contents
 
 ```
-spl.py                              Core SPL implementation (SemanticUnit,
-                                    SemanticProjection, EmissionEngine E0–E4,
-                                    ClaimCandidateConverter)
-spl_gateway.py                      Protocol-callable interface layer
-                                    (emit_claim_nodes, hash_claim, GatewayEvent)
+spl.py                              Probabilistic pre-protocol stage:
+                                    SemanticUnit, SemanticProjection,
+                                    EmissionEngine E0–E4, SPLThresholds,
+                                    compute_h_norm, compute_jsd
+spl_gateway.py                      Legal protocol entry point (boundary layer):
+                                    ClaimCandidateConverter, _CATEGORY_HINT_MAP,
+                                    _MODALITY_HINT_MAP, emit_claim_nodes,
+                                    validate_candidate_for_protocol_entry,
+                                    hash_claim, GatewayEvent, SPLGateway
 WP2_Semantic_Projection_Layer.md    Full working paper (theory)
 
 tests/

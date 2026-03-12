@@ -30,8 +30,9 @@ _mock.setup()
 from spl import (
     SemanticUnit, SemanticProjection, ClaimCandidate,
     EmissionEngine, EmissionStatus, EmissionRule,
-    SPLThresholds, ClaimCandidateConverter, compute_h_norm,
+    SPLThresholds, compute_h_norm,
 )
+from spl_gateway import ClaimCandidateConverter
 
 Θ = SPLThresholds()
 

@@ -1,38 +1,35 @@
 """
 Alexandria Core — spl.py
-Semantic Projection Layer (SPL) — Interface Layer
-==================================================
+Semantic Projection Layer (SPL) — Probabilistic Pre-Protocol Stage
+==================================================================
 
 Working Paper 2: "Semantic Projection Layer — A Formal Bridge between
 Natural Language and Epistemic Protocol" (Rentschler, v16)
 
-This module implements the INTERFACE between the SPL (pre-protocol) and
-the Alexandria Protocol (canonical claim layer). It does NOT implement
-the full SPL computation — that requires an NLP backend and is defined
-in WP2 as a separate system.
+This module implements the PROBABILISTIC stage of the SPL pipeline.
+It does NOT implement the protocol boundary — that is spl_gateway.py.
 
 What this module provides:
-    - Data classes for SemanticUnit, SemanticProjection, ClaimCandidate
-    - EmissionStatus enum (READY_FOR_CLAIM, AMBIGUOUS, BRANCH_CANDIDATE,
-      STRUCTURAL_VIOLATION, PROJECTED)
-    - EmissionRule enum (E0, E1, E2, E3, E4)
-    - SPLThresholds (Θ = {τ₀, τ₁, τ₂, τ₃, τ₄})
-    - ClaimCandidateConverter: the ONLY legal path from ClaimCandidate
-      to ClaimNode (the protocol boundary)
-    - JSD computation (base-2, global simplex embedding per WP2 §3.3.5)
+    - SemanticUnit       minimal epistemic text fragment
+    - SemanticProjection probabilistic relational structure π(s)
+    - ClaimCandidate     discrete triple extracted by an emission rule
+    - EmissionStatus     PROJECTED / READY_FOR_CLAIM / AMBIGUOUS /
+                         BRANCH_CANDIDATE / STRUCTURAL_VIOLATION
+    - EmissionRule       E0 / E1 / E2 / E3 / E4
+    - SPLThresholds      Θ = {τ₀, τ₁, τ₂, τ₃, τ₄}
+    - EmissionEngine     evaluates E0–E4 against a SemanticProjection
+    - compute_h_norm()   normalised Shannon entropy (WP2 §7.1)
+    - compute_jsd()      Jensen-Shannon Divergence (WP2 §3.3.5)
+
+What this module does NOT provide:
+    - ClaimCandidateConverter   → spl_gateway.py
+    - Protocol boundary logic   → spl_gateway.py
+    - ClaimNode creation        → spl_gateway.py
 
 Protocol invariant [SHALL]:
     No text fragment may become a canonical ClaimNode directly.
     The path is: text → SemanticUnit → SemanticProjection →
-                 ClaimCandidate → (ClaimCandidateConverter) → ClaimNode
-
-    This is the central architectural rule of WP2 §2:
-    "The SPL is pre-protocolar: its outputs are claim candidates,
-    not sealed claims."
-
-[DBA] The three new object types (SemanticUnit, SemanticProjection,
-ClaimCandidate) are DBA extensions that operate upstream of the protocol.
-The protocol core (ClaimNode, Patch, Adjudication, Seal) is unmodified.
+                 ClaimCandidate → (spl_gateway.py) → ClaimNode
 
 Reference: WP2 §3, §7, Appendix I
 """
@@ -518,151 +515,6 @@ class EmissionEngine:
             proj_a.emission_rule = EmissionRule.E4
             proj_b.emission_rule = EmissionRule.E4
         return jsd
-
-
-# ── Protocol Boundary: ClaimCandidate → ClaimNode ────────────────────────────
-
-# Mapping from SPL semantic category hints to Alexandria protocol Categories
-# [DBA] This mapping is the formal boundary between pre-protocol and protocol.
-# The SPL produces hints; the protocol makes the final classification.
-_CATEGORY_HINT_MAP: dict[str, str] = {
-    "dynamic":     "EMPIRICAL",
-    "statistical": "EMPIRICAL",
-    "epistemic":   "EMPIRICAL",
-    "model":       "MODEL",
-    "normative":   "NORMATIVE",
-    "ontic":       "EMPIRICAL",   # default for ontological relations
-}
-
-# Mapping from SPL modality hints to Alexandria Modality enum values
-_MODALITY_HINT_MAP: dict[str, str] = {
-    "asserted":     "established",
-    "suggested":    "evidence",
-    "hypothesized": "hypothesis",
-    "possible":     "suggestion",
-}
-
-
-class ClaimCandidateConverter:
-    """
-    The ONLY legal path from ClaimCandidate to ClaimNode.
-
-    This class enforces the protocol boundary defined in WP2 §2:
-    "The epistemic validity of all claims remains governed exclusively
-    by the Alexandria protocol."
-
-    Rules enforced at the boundary [SHALL]:
-    1. semantic_category_hint is converted to Alexandria Category.
-       The SPL does not set Category — it provides hints.
-    2. modality_hint is converted to Alexandria Modality.
-    3. spl_provenance dict is attached to source_refs for auditability.
-    4. assumptions[] is always set (protocol invariant).
-    5. The ClaimNode is NOT yet in VALIDATED status — it goes through
-       the normal protocol cycle (PatchEmitter → AuditGate).
-
-    [DBA] The converter is a DBA extension. A production system could
-    replace it with a more sophisticated mapping (e.g. domain-specific
-    category inference). The invariant is: ClaimCandidate must pass
-    through SOME converter before becoming a ClaimNode.
-    """
-
-    def convert(
-        self,
-        candidate: ClaimCandidate,
-        extra_assumptions: list[str] | None = None,
-    ) -> "ClaimNode":
-        """
-        Convert a ClaimCandidate to a ClaimNode.
-
-        Raises ValueError if candidate.emission_rule not in {E1, E2}.
-        BRANCH_CANDIDATE and AMBIGUOUS must never be converted directly.
-        """
-        from .schema import ClaimNode, BuilderOrigin
-
-        if candidate.emission_rule not in (EmissionRule.E1, EmissionRule.E2):
-            raise ValueError(
-                f"ClaimCandidate with emission_rule={candidate.emission_rule.value} "
-                "cannot be converted to ClaimNode. "
-                "Only E1/E2 (READY_FOR_CLAIM) candidates are convertible."
-            )
-
-        category   = self._map_category(candidate.semantic_category_hint)
-        modality   = self._map_modality(candidate.modality_hint)
-        origin     = BuilderOrigin.ALPHA if candidate.builder_origin == "alpha" else BuilderOrigin.BETA
-        source_refs = [self._build_provenance(candidate)]
-        assumptions = self._build_assumptions(candidate, extra_assumptions)
-
-        claim = ClaimNode.new(
-            subject=candidate.subject,
-            predicate=candidate.relation,
-            object=candidate.object,
-            category=category,
-            assumptions=assumptions,
-            source_refs=source_refs,
-        )
-        claim.modality      = modality
-        claim.builder_origin = origin
-        return claim
-
-    def _map_category(self, hint: str) -> "Category":
-        """Map a semantic category hint to an Alexandria Category enum value."""
-        from .schema import Category
-        cat_value = _CATEGORY_HINT_MAP.get(hint.lower(), "EMPIRICAL")
-        try:
-            return Category[cat_value]
-        except KeyError:
-            return Category.EMPIRICAL
-
-    def _map_modality(self, hint: str) -> "Modality":
-        """Map a modality hint to an Alexandria Modality enum value."""
-        from .schema import Modality
-        mod_value = _MODALITY_HINT_MAP.get(hint.lower(), "hypothesis")
-        try:
-            return Modality(mod_value)
-        except ValueError:
-            return Modality.HYPOTHESIS
-
-    def _build_provenance(self, candidate: ClaimCandidate) -> str:
-        """Build the SPL provenance string for source_refs (WP2 §7.4)."""
-        return (
-            f"spl:{candidate.unit_id[:8]}/"
-            f"{candidate.projection_id[:8]}/"
-            f"E{candidate.emission_rule.value}/"
-            f"score={candidate.relation_score:.3f}/"
-            f"h={candidate.h_norm:.3f}/"
-            f"matrix={candidate.matrix_version}"
-        )
-
-    def _build_assumptions(
-        self,
-        candidate: ClaimCandidate,
-        extra: list[str] | None,
-    ) -> list[str]:
-        """Build the assumptions list [SHALL be non-empty]."""
-        assumptions = list(extra or [])
-        assumptions.append(
-            f"SPL projection: relation={candidate.relation} "
-            f"score={candidate.relation_score:.3f} "
-            f"h_norm={candidate.h_norm:.3f}"
-        )
-        if candidate.scope_hint:
-            assumptions.append(f"scope={candidate.scope_hint}")
-        return assumptions
-
-    def convert_batch(
-        self,
-        candidates: list[ClaimCandidate],
-        extra_assumptions: list[str] | None = None,
-    ) -> list["ClaimNode"]:
-        """Convert a list of E1/E2 candidates. Skips non-convertible."""
-        claims = []
-        for c in candidates:
-            if c.emission_rule in (EmissionRule.E1, EmissionRule.E2):
-                try:
-                    claims.append(self.convert(c, extra_assumptions))
-                except (ValueError, KeyError, AttributeError):
-                    pass
-        return claims
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

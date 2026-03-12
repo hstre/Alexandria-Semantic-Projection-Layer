@@ -64,6 +64,8 @@ def setup() -> None:
     _mock.EpistemicStatus = type("EpistemicStatus", (), {"UNVALIDATED": "unvalidated"})()
 
     import spl as _spl_module
+    import spl_gateway as _gw_module
     _spl_module.__package__ = "_spl_pkg"
+    _gw_module.__package__  = "_spl_pkg"
     sys.modules["_spl_pkg"]        = types.ModuleType("_spl_pkg")
     sys.modules["_spl_pkg.schema"] = _mock

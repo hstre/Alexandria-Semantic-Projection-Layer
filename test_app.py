@@ -66,18 +66,21 @@ _mock_schema.Modality = _Modality
 _mock_schema.BuilderOrigin = _BuilderOrigin()
 _mock_schema.EpistemicStatus = _EpistemicStatus()
 
-# Inject als .schema relativ zu spl.py
+# Inject als .schema relativ zu spl.py und spl_gateway.py
 import importlib
 import spl as _spl_module
+import spl_gateway as _gw_module
 _spl_module.__package__ = "_spl_pkg"
+_gw_module.__package__  = "_spl_pkg"
 sys.modules["_spl_pkg"] = types.ModuleType("_spl_pkg")
 sys.modules["_spl_pkg.schema"] = _mock_schema
 
 from spl import (
     SemanticUnit, SemanticProjection, ClaimCandidate,
     EmissionEngine, EmissionStatus, EmissionRule, SPLThresholds,
-    ClaimCandidateConverter, compute_jsd, compute_h_norm,
+    compute_jsd, compute_h_norm,
 )
+from spl_gateway import ClaimCandidateConverter
 
 VERBOSE = "--verbose" in sys.argv or "-v" in sys.argv
 
