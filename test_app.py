@@ -66,14 +66,13 @@ _mock_schema.Modality = _Modality
 _mock_schema.BuilderOrigin = _BuilderOrigin()
 _mock_schema.EpistemicStatus = _EpistemicStatus()
 
-# Inject als .schema relativ zu spl.py und spl_gateway.py
+# Inject schema mock: spl.py uses relative .schema; spl_gateway._converter does too
 import importlib
 import spl as _spl_module
-import spl_gateway as _gw_module
 _spl_module.__package__ = "_spl_pkg"
-_gw_module.__package__  = "_spl_pkg"
-sys.modules["_spl_pkg"] = types.ModuleType("_spl_pkg")
-sys.modules["_spl_pkg.schema"] = _mock_schema
+sys.modules["_spl_pkg"]           = types.ModuleType("_spl_pkg")
+sys.modules["_spl_pkg.schema"]    = _mock_schema   # for spl.py
+sys.modules["spl_gateway.schema"] = _mock_schema   # for spl_gateway._converter
 
 from spl import (
     SemanticUnit, SemanticProjection, ClaimCandidate,

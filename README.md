@@ -87,7 +87,7 @@ SemanticProjection    probability tensor over relation space
     ▼  Emission (E0–E4)
 ClaimCandidate        structured, scored, entropy-annotated
     │
-    ▼  ClaimCandidateConverter  ← protocol boundary
+    ▼  ClaimCandidateConverter  ← spl_gateway.py (gateway boundary)
 ClaimNode             Alexandria canonical claim
 ```
 
