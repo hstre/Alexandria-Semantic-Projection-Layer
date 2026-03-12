@@ -78,20 +78,25 @@ The SPL solves this by introducing a probabilistic intermediate representation.
 ```
 Source Text
     │
-    ▼  Fragmentation
+    ▼  Fragmentation                        spl.py
 SemanticUnit          minimal epistemic unit (subject · relation · object)
     │
-    ▼  Projection
+    ▼  Projection                           spl.py
 SemanticProjection    probability tensor over relation space
     │
-    ▼  Emission (E0–E4)
+    ▼  Emission (E0–E4)                     spl.py
 ClaimCandidate        structured, scored, entropy-annotated
     │
-    ▼  ClaimCandidateConverter  ← spl_gateway.py (gateway boundary)
+    ▼  SPLGateway.emit_claim_nodes()        spl_gateway/  ← BOUNDARY
+       uses ClaimCandidateConverter internally;
+       validates, converts, hashes, logs
 ClaimNode             Alexandria canonical claim
 ```
 
-**Protocol invariant [SHALL]:** No text fragment may become a ClaimNode directly. The path above is the only legal entry into the Alexandria graph.
+**Protocol invariant [SHALL]:** No text fragment may become a ClaimNode directly.
+The boundary is `spl_gateway` — specifically `SPLGateway.emit_claim_nodes()`.
+`ClaimCandidateConverter` is the conversion mechanism *used by* the gateway;
+it does not define the boundary.
 
 ---
 
@@ -135,11 +140,20 @@ spl.py                              Probabilistic pre-protocol stage:
                                     SemanticUnit, SemanticProjection,
                                     EmissionEngine E0–E4, SPLThresholds,
                                     compute_h_norm, compute_jsd
-spl_gateway.py                      Legal protocol entry point (boundary layer):
-                                    ClaimCandidateConverter, _CATEGORY_HINT_MAP,
-                                    _MODALITY_HINT_MAP, emit_claim_nodes,
-                                    validate_candidate_for_protocol_entry,
-                                    hash_claim, GatewayEvent, SPLGateway
+
+spl_gateway/                        THE BOUNDARY — legal protocol entry point.
+  __init__.py                       Public API re-export (no import changes needed)
+  _exceptions.py                    SPLGatewayError, CandidateRejectedError,
+                                    ClaimValidationError
+  _types.py                         GatewayEvent, SPLResult, DualBuilderResult
+  _utils.py                         canonicalize_*, hash_claim, validate_claim_node
+  _converter.py                     ClaimCandidateConverter — conversion mechanism
+                                    used BY the gateway; not the boundary itself.
+                                    Also: _CATEGORY_HINT_MAP, _MODALITY_HINT_MAP,
+                                    validate_candidate_for_protocol_entry()
+  _gateway.py                       SPLGateway — enforces the boundary via
+                                    emit_claim_nodes() (the ONLY legal path to
+                                    ClaimNode). make_gateway() factory.
 WP2_Semantic_Projection_Layer.md    Full working paper (theory)
 
 tests/
