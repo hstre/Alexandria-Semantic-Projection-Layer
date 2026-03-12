@@ -1,5 +1,7 @@
 # Alexandria — Semantic Projection Layer
 
+[![CI](https://github.com/hstre/Alexandria-Semantic-Projection-Layer/actions/workflows/ci.yml/badge.svg)](https://github.com/hstre/Alexandria-Semantic-Projection-Layer/actions/workflows/ci.yml)
+
 **Working Paper 2 · Formal Bridge between Natural Language and Epistemic Protocol**
 
 > *The SPL transforms natural language segments into probabilistic relational tensors from which canonical claim candidates are derived through entropy-constrained projection rules.*
@@ -156,10 +158,6 @@ spl_gateway/                        THE BOUNDARY — legal protocol entry point.
                                     ClaimNode). make_gateway() factory.
 WP2_Semantic_Projection_Layer.md    Full working paper (theory)
 
-test_app.py                         Standalone theory demo — runs the full WP2
-                                    pipeline end-to-end with annotated output.
-                                    Run: python test_app.py [--verbose]
-
 tests/
   test_entropy.py                   H_norm unit tests
   test_jsd.py                       JSD unit tests
@@ -167,6 +165,12 @@ tests/
   test_gateway.py                   Gateway boundary unit tests (97 tests total)
 
 examples/
+  demo_pipeline.py                  Pipeline walkthrough — all four emission
+                                    rules (E1–E4) with annotated output.
+                                    Run: python examples/demo_pipeline.py
+  theory_verification.py            Full WP2 theory verification — exhaustive
+                                    E0–E4 tests with verbose annotation.
+                                    Run: python examples/theory_verification.py
   simple_claim.txt                  "Paris is the capital of France." (E1)
   ambiguous_claim.txt               Modal+conjunctive hedging → E3 block
   multi_claim.txt                   3-unit sentence → mixed E1/E2 output

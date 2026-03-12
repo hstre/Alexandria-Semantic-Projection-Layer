@@ -20,7 +20,10 @@ Ausführung:
 """
 
 import sys
+import os
 import uuid
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Patch: ClaimCandidateConverter braucht .schema — wir mocken es für den Test
 import types
