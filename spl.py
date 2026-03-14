@@ -524,3 +524,32 @@ def _dominant(dist: dict[str, float]) -> str:
     if not dist:
         return ""
     return max(dist, key=dist.get)
+
+
+# ── NLP convenience entry point ───────────────────────────────────────────────
+
+def project_text(text: str, **kwargs) -> "SemanticProjection":
+    """
+    Convenience function: text → SemanticProjection via NLP backend.
+
+    Requires ``nlp_backend`` (sentence-transformers) to be installed.
+    If nlp_backend is not available an ImportError is raised with a helpful
+    message so callers can degrade gracefully.
+
+    Usage::
+
+        from spl import project_text
+        proj = project_text("Paris is the capital of France.")
+        # proj.P_r → {"capital_of": 0.68, ...}
+
+    All keyword arguments are forwarded to :class:`nlp_backend.SPLNLPBackend`.
+    """
+    try:
+        from nlp_backend import SPLNLPBackend  # optional dependency
+    except ImportError as exc:
+        raise ImportError(
+            "nlp_backend requires sentence-transformers. "
+            "Install with: pip install sentence-transformers"
+        ) from exc
+    backend = SPLNLPBackend(**kwargs)
+    return backend.project_text(text)

@@ -192,6 +192,91 @@ The reference implementation (`spl.py`) is also part of `hstre/Alexandria-Protok
 
 ---
 
+## NLP Backend
+
+The `nlp_backend.py` module implements real semantic projection via anchor embeddings.
+It translates raw text into a `SemanticProjection` without any manually specified distribution.
+
+### Installation
+
+```bash
+pip install -r requirements.txt
+```
+
+`requirements.txt` covers all runtime dependencies:
+
+```
+sentence-transformers>=2.7.0
+numpy>=1.24.0
+```
+
+The default model (`all-MiniLM-L6-v2`, ~80 MB) is downloaded automatically from HuggingFace
+on first use. No GPU required. No network access needed after the first run.
+
+spaCy is an **optional** dependency. If available, it improves subject/object extraction via
+dependency parsing. Without it the backend falls back to regex heuristics automatically.
+
+### Quick start
+
+```python
+from nlp_backend import SPLNLPBackend
+
+backend = SPLNLPBackend()                                 # downloads model once
+proj    = backend.project_text("Paris is the capital of France.")
+
+print(proj.P_r)          # {"capital_of": 0.68, "is_a": 0.11, ...}
+print(proj.P_category)   # {"ontic": 0.62, ...}
+print(proj.P_modality)   # {"asserted": 0.91, ...}
+```
+
+### Full pipeline
+
+```python
+from nlp_backend import SPLNLPBackend
+from spl import EmissionEngine
+from spl_gateway import SPLGateway
+
+backend = SPLNLPBackend()
+engine  = EmissionEngine()
+gateway = SPLGateway()
+
+proj       = backend.project_text("Paris is the capital of France.")
+candidates = engine.emit(proj)                            # E1 / E2 / E3 / E0
+nodes      = gateway.emit_claim_nodes(candidates)         # ClaimNode list
+
+for node in nodes:
+    print(node)   # ClaimNode('Paris' --[capital_of]--> 'France')
+```
+
+### Dual-builder (E4 divergence detection)
+
+```python
+from nlp_backend import make_dual_backends
+from spl_gateway import SPLGateway
+
+alpha, beta = make_dual_backends()          # T_alpha=0.5, T_beta=0.8
+gateway     = SPLGateway()
+text        = "Aspirin may reduce cardiovascular risk."
+
+dual = gateway.submit_dual(
+    alpha.project_text(text),
+    beta.project_text(text),
+)
+if dual.branched:
+    print(f"Builder divergence JSD={dual.jsd:.3f} → BRANCH_CANDIDATE")
+```
+
+### Configuration
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `model_name` | `"all-MiniLM-L6-v2"` | HuggingFace SentenceTransformer model |
+| `builder_origin` | `"alpha"` | `"alpha"` or `"beta"` |
+| `temperature` | `0.5` | Softmax sharpness (lower → sharper P_r) |
+| `matrix_version` | `"v2.2.0-SML"` | Relation matrix version tag (do not change) |
+
+---
+
 ## Status
 
 This is a **working paper** — the theory is stable, the implementation is complete, the NLP backend is operational.
