@@ -138,6 +138,12 @@ it does not define the boundary.
 ## Repository Contents
 
 ```
+nlp_backend.py                      Anchor-embedding NLP backend.
+                                    Computes P_r, P_category, P_modality
+                                    via sentence-transformers cosine similarity
+                                    against versioned anchor phrases (ℛ v2.2.0-SML).
+                                    Includes make_dual_backends() for E4 workflows.
+
 spl.py                              Probabilistic pre-protocol stage:
                                     SemanticUnit, SemanticProjection,
                                     EmissionEngine E0–E4, SPLThresholds,
@@ -163,6 +169,7 @@ tests/
   test_jsd.py                       JSD unit tests
   test_spl_rules.py                 Emission rules E0–E4 + end-to-end pipeline
   test_gateway.py                   Gateway boundary unit tests (97 tests total)
+  test_nlp_backend.py               NLP backend unit tests (mocked model)
 
 examples/
   demo_pipeline.py                  Pipeline walkthrough — all four emission
@@ -175,6 +182,8 @@ examples/
   ambiguous_claim.txt               Modal+conjunctive hedging → E3 block
   multi_claim.txt                   3-unit sentence → mixed E1/E2 output
 
+requirements.txt                    sentence-transformers, numpy
+
 audit_log.json                      GatewayEvent log (auto-generated at runtime)
 README.md                           This file
 ```
@@ -185,11 +194,10 @@ The reference implementation (`spl.py`) is also part of `hstre/Alexandria-Protok
 
 ## Status
 
-This is a **working paper** — the theory is stable, the implementation is complete, the NLP backend (embedding model integration) is pending.
+This is a **working paper** — the theory is stable, the implementation is complete, the NLP backend is operational.
 
 Open items:
 - τ₂ calibration against gold-standard corpora
-- Production NLP backend (sentence-transformers / spaCy)
 - Evaluation against benchmark plan (Section 4 / WP2 Appendix I)
 
 ---
