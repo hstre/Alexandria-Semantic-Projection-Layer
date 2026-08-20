@@ -274,26 +274,35 @@ def canonicalize_entities(entity: str) -> str:
     return canonicalize_text(text)
 
 
-def hash_claim(subject: str, predicate: str, obj: str) -> str:
+def hash_claim(
+    subject: str,
+    predicate: str,
+    obj: str,
+    *,
+    subject_id: str = "",
+    object_id: str = "",
+    scope: str = "",
+) -> str:
     """
     Compute a deterministic SHA256 claim identity hash.
 
     Guarantees: identical (subject, predicate, object) → identical claim_id,
     regardless of surface-form variation that canonicalize_entities() collapses.
 
-    Format: hex digest of SHA256(canonical_subject + "|" + canonical_predicate
-                                  + "|" + canonical_object)
+    When M3 supplied canonical entity IDs, those are used instead of the
+    language-dependent surfaces.  Scope is part of the CIK per WP2 §10.2.
 
     This is the deterministic conversion guarantee required by the protocol:
     the same epistemic content always produces the same claim_id.
     """
-    canonical = (
-        canonicalize_entities(subject)
-        + "|"
-        + canonicalize_text(predicate)
-        + "|"
-        + canonicalize_entities(obj)
-    )
+    canonical_subject = canonicalize_text(subject_id) if subject_id else canonicalize_entities(subject)
+    canonical_object = canonicalize_text(object_id) if object_id else canonicalize_entities(obj)
+    canonical = "|".join((
+        canonical_subject,
+        canonicalize_text(predicate),
+        canonical_object,
+        canonicalize_text(scope),
+    ))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -550,7 +559,14 @@ class SPLGateway:
                 self._validate_candidate(candidate, jsd, evidence_count)
                 node = self._converter.convert(candidate, extra_assumptions)
                 validate_claim_node(node)
-                node.claim_id = hash_claim(node.subject, node.predicate, node.object)
+                node.claim_id = hash_claim(
+                    node.subject,
+                    node.predicate,
+                    node.object,
+                    subject_id=candidate.subject_id,
+                    object_id=candidate.object_id,
+                    scope=candidate.scope_hint,
+                )
                 nodes.append(node)
                 self._emit_event(candidate, "EMITTED", "", node.claim_id)
             except ClaimValidationError as e:
@@ -789,11 +805,16 @@ class SPLGateway:
 
     def _validate_projection(self, projection: SemanticProjection) -> None:
         """Validate P_r structure before emission."""
-        if not projection.P_r:
+        # A projection with high illegal mass is a valid M3 output.  It must
+        # reach E0 rather than being mistaken for a missing backend result.
+        if not projection.P_r and projection.p_illegal <= self._theta.tau_0:
             raise SPLGatewayError(
                 f"projection.P_r is empty (projection_id={projection.projection_id}). "
-                "NLP backend must provide a non-empty relational distribution."
+                "M3 must provide a non-empty legal relational distribution or "
+                "p_illegal above the E0 threshold."
             )
+        if not projection.P_r:
+            return
         total = sum(projection.P_r.values())
         if abs(total - 1.0) > 0.01:
             raise SPLGatewayError(

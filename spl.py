@@ -6,10 +6,9 @@ Semantic Projection Layer (SPL) — Interface Layer
 Working Paper 2: "Semantic Projection Layer — A Formal Bridge between
 Natural Language and Epistemic Protocol" (Rentschler, v16)
 
-This module implements the INTERFACE between the SPL (pre-protocol) and
-the Alexandria Protocol (canonical claim layer). It does NOT implement
-the full SPL computation — that requires an NLP backend and is defined
-in WP2 as a separate system.
+This module implements the canonical data model and the M4/M5 boundary
+between the SPL (pre-protocol) and the Alexandria Protocol.  The offline
+reference implementation of M1--M3 lives in ``spl_frontend.py``.
 
 What this module provides:
     - Data classes for SemanticUnit, SemanticProjection, ClaimCandidate
@@ -44,7 +43,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 
 # ── Emission Status (WP2 §7.2, Appendix I.1) ─────────────────────────────────
@@ -150,12 +149,15 @@ class SemanticUnit:
     offset_start:         int = 0
     offset_end:           int = 0
     fragmentation_signal: str = ""
+    source_language:      str = "und"
+    context_window:       str = ""
     created_at:           float = field(default_factory=time.time)
 
     @classmethod
     def new(cls, source_text: str, source_ref: str,
             offset_start: int = 0, offset_end: int = 0,
-            fragmentation_signal: str = "") -> "SemanticUnit":
+            fragmentation_signal: str = "", source_language: str = "und",
+            context_window: str = "") -> "SemanticUnit":
         return cls(
             unit_id=str(uuid.uuid4()),
             source_text=source_text,
@@ -163,6 +165,8 @@ class SemanticUnit:
             offset_start=offset_start,
             offset_end=offset_end,
             fragmentation_signal=fragmentation_signal,
+            source_language=source_language,
+            context_window=context_window,
         )
 
     def to_dict(self) -> dict:
@@ -173,11 +177,38 @@ class SemanticUnit:
             "offset_start":         self.offset_start,
             "offset_end":           self.offset_end,
             "fragmentation_signal": self.fragmentation_signal,
+            "source_language":      self.source_language,
+            "context_window":       self.context_window,
             "created_at":           self.created_at,
         }
 
 
 # ── SemanticProjection (WP2 §3.3) ────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class TripleProbability:
+    """One sparse cell of R(subject, relation, object)."""
+
+    subject:      str
+    relation:     str
+    object:       str
+    probability:  float
+    subject_id:   str = ""
+    object_id:    str = ""
+    subject_type: str = ""
+    object_type:  str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "subject": self.subject,
+            "relation": self.relation,
+            "object": self.object,
+            "probability": self.probability,
+            "subject_id": self.subject_id,
+            "object_id": self.object_id,
+            "subject_type": self.subject_type,
+            "object_type": self.object_type,
+        }
 
 @dataclass
 class SemanticProjection:
@@ -231,6 +262,18 @@ class SemanticProjection:
     P_modality:         dict[str, float] = field(default_factory=dict)
     P_scope:            dict[str, float] = field(default_factory=dict)
 
+    # Sparse relational tensor and its remaining marginals.  Empty values are
+    # accepted for backwards compatibility with pre-M3 projections.
+    triple_distribution: list[TripleProbability] = field(default_factory=list)
+    P_subject:         dict[str, float] = field(default_factory=dict)
+    P_object:          dict[str, float] = field(default_factory=dict)
+    P_family:          dict[str, float] = field(default_factory=dict)
+    P_temporal:        dict[str, float] = field(default_factory=dict)
+    entity_type_distributions: dict[str, dict[str, float]] = field(default_factory=dict)
+    uncertainty:       dict[str, float | bool] = field(default_factory=dict)
+    source_ref:        str = ""
+    backend_trace:     dict[str, Any] = field(default_factory=dict)
+
     # Derived metrics
     h_norm:             float = 0.0
     status:             EmissionStatus = EmissionStatus.PROJECTED
@@ -253,10 +296,21 @@ class SemanticProjection:
             "object_candidates":  self.object_candidates,
             "P_category":         self.P_category,
             "P_modality":         self.P_modality,
+            "P_scope":            self.P_scope,
+            "triple_distribution": [cell.to_dict() for cell in self.triple_distribution],
+            "P_subject":          self.P_subject,
+            "P_object":           self.P_object,
+            "P_family":           self.P_family,
+            "P_temporal":         self.P_temporal,
+            "entity_type_distributions": self.entity_type_distributions,
+            "uncertainty":        self.uncertainty,
+            "source_ref":         self.source_ref,
             "h_norm":             self.h_norm,
             "status":             self.status.value,
             "emission_rule":      self.emission_rule.value if self.emission_rule else None,
+            "p_illegal":          self.p_illegal,
             "matrix_seal_hash":   self.matrix_seal_hash,
+            "backend_trace":      self.backend_trace,
             "created_at":         self.created_at,
         }
 
@@ -328,6 +382,13 @@ class ClaimCandidate:
     matrix_version:            str = ""
     builder_origin:            str = "alpha"
 
+    # Canonical, language-independent identity and orthogonal dimensions.
+    subject_id:                str = ""
+    object_id:                 str = ""
+    subject_type:              str = ""
+    object_type:               str = ""
+    temporal_ordering:         str = "unspecified"
+
     created_at:                float = field(default_factory=time.time)
 
     @classmethod
@@ -340,12 +401,13 @@ class ClaimCandidate:
         relation_score: float,
         rank: int = 1,
         emission_rule: EmissionRule = EmissionRule.E1,
+        triple: TripleProbability | None = None,
     ) -> "ClaimCandidate":
         return cls(
             candidate_id=str(uuid.uuid4()),
             projection_id=projection.projection_id,
             unit_id=projection.unit_id,
-            source_ref="",
+            source_ref=projection.source_ref,
             subject=subject,
             relation=relation,
             object=object_,
@@ -353,10 +415,16 @@ class ClaimCandidate:
             rank=rank,
             emission_rule=emission_rule,
             modality_hint=_dominant(projection.P_modality) or "asserted",
+            scope_hint=_dominant(projection.P_scope) or "",
             semantic_category_hint=_dominant(projection.P_category) or "",
             h_norm=projection.h_norm,
             matrix_version=projection.matrix_version,
             builder_origin=projection.builder_origin,
+            subject_id=triple.subject_id if triple else "",
+            object_id=triple.object_id if triple else "",
+            subject_type=triple.subject_type if triple else "",
+            object_type=triple.object_type if triple else "",
+            temporal_ordering=_dominant(projection.P_temporal) or "unspecified",
         )
 
     def to_dict(self) -> dict:
@@ -376,6 +444,12 @@ class ClaimCandidate:
             "h_norm":                 self.h_norm,
             "matrix_version":         self.matrix_version,
             "builder_origin":         self.builder_origin,
+            "subject_id":             self.subject_id,
+            "object_id":              self.object_id,
+            "subject_type":           self.subject_type,
+            "object_type":            self.object_type,
+            "scope_hint":             self.scope_hint,
+            "temporal_ordering":      self.temporal_ordering,
             "created_at":             self.created_at,
         }
 
@@ -484,14 +558,35 @@ class EmissionEngine:
         if max_prob > self.Θ.tau_1 and h < self.Θ.tau_2:
             projection.status = EmissionStatus.READY_FOR_CLAIM
             projection.emission_rule = EmissionRule.E1
-            subj = projection.subject_candidates[0] if projection.subject_candidates else ""
-            obj  = projection.object_candidates[0]  if projection.object_candidates  else ""
-            return [ClaimCandidate.new(projection, subj, max_rel, obj, max_prob, rank=1,
-                                       emission_rule=EmissionRule.E1)]
+            triple = self._best_triple(projection, relation=max_rel)
+            subj = triple.subject if triple else (projection.subject_candidates[0] if projection.subject_candidates else "")
+            obj = triple.object if triple else (projection.object_candidates[0] if projection.object_candidates else "")
+            score = triple.probability if triple else max_prob
+            return [ClaimCandidate.new(projection, subj, max_rel, obj, score, rank=1,
+                                       emission_rule=EmissionRule.E1, triple=triple)]
 
         # E2 — multiple
         projection.status = EmissionStatus.READY_FOR_CLAIM
         projection.emission_rule = EmissionRule.E2
+        if projection.triple_distribution:
+            triples = sorted(
+                projection.triple_distribution,
+                key=lambda cell: -cell.probability,
+            )[:k]
+            return [
+                ClaimCandidate.new(
+                    projection,
+                    cell.subject,
+                    cell.relation,
+                    cell.object,
+                    cell.probability,
+                    rank=i + 1,
+                    emission_rule=EmissionRule.E2,
+                    triple=cell,
+                )
+                for i, cell in enumerate(triples)
+            ]
+
         top_k = sorted(P_r.items(), key=lambda x: -x[1])[:k]
         subj = projection.subject_candidates[0] if projection.subject_candidates else ""
         obj  = projection.object_candidates[0]  if projection.object_candidates  else ""
@@ -500,6 +595,16 @@ class EmissionEngine:
                                emission_rule=EmissionRule.E2)
             for i, (rel, prob) in enumerate(top_k)
         ]
+
+    @staticmethod
+    def _best_triple(
+        projection: SemanticProjection,
+        relation: str | None = None,
+    ) -> TripleProbability | None:
+        cells = projection.triple_distribution
+        if relation is not None:
+            cells = [cell for cell in cells if cell.relation == relation]
+        return max(cells, key=lambda cell: cell.probability, default=None)
 
     def apply_e4(
         self,
@@ -590,6 +695,8 @@ class ClaimCandidateConverter:
         modality   = self._map_modality(candidate.modality_hint)
         origin     = BuilderOrigin.ALPHA if candidate.builder_origin == "alpha" else BuilderOrigin.BETA
         source_refs = [self._build_provenance(candidate)]
+        if candidate.source_ref:
+            source_refs.append(candidate.source_ref)
         assumptions = self._build_assumptions(candidate, extra_assumptions)
 
         claim = ClaimNode.new(
@@ -602,6 +709,18 @@ class ClaimCandidateConverter:
         )
         claim.modality      = modality
         claim.builder_origin = origin
+        if hasattr(claim, "scope") and candidate.scope_hint:
+            claim.scope = {"semantic_scope": candidate.scope_hint}
+        if hasattr(claim, "time_scope") and candidate.temporal_ordering != "unspecified":
+            claim.time_scope = {"ordering": candidate.temporal_ordering}
+        if hasattr(claim, "qualifiers"):
+            claim.qualifiers = dict(getattr(claim, "qualifiers", {}) or {})
+            claim.qualifiers["spl_identity"] = {
+                "subject_id": candidate.subject_id,
+                "object_id": candidate.object_id,
+                "subject_type": candidate.subject_type,
+                "object_type": candidate.object_type,
+            }
         return claim
 
     def _map_category(self, hint: str) -> "Category":
@@ -627,7 +746,7 @@ class ClaimCandidateConverter:
         return (
             f"spl:{candidate.unit_id[:8]}/"
             f"{candidate.projection_id[:8]}/"
-            f"E{candidate.emission_rule.value}/"
+            f"{candidate.emission_rule.value}/"
             f"score={candidate.relation_score:.3f}/"
             f"h={candidate.h_norm:.3f}/"
             f"matrix={candidate.matrix_version}"

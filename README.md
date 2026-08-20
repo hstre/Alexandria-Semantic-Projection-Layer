@@ -13,7 +13,7 @@ Part of the [Alexandria Protocol](https://github.com/hstre/Alexandria-Protokoll)
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  SPL Layer (spl.py)           PROBABILISTIC         │
+│  SPL Layer (spl_frontend.py + spl.py) PROBABILISTIC │
 │  ─────────────────────────────────────────────────  │
 │  Text → SemanticUnit → SemanticProjection           │
 │  Operates on distributions P_r over relation space  │
@@ -87,6 +87,36 @@ ClaimNode             Alexandria canonical claim
 
 **Protocol invariant [SHALL]:** No text fragment may become a ClaimNode directly. The path above is the only legal entry into the Alexandria graph.
 
+## Offline M1--M3 reference pipeline
+
+The repository includes an inspectable, deterministic German/English baseline.
+It has no network, API-key, hosted-model, or third-party package dependency:
+
+```python
+from spl_frontend import SemanticCompiler
+from spl import EmissionEngine
+
+result = SemanticCompiler().compile(
+    "Paris ist die Hauptstadt von Frankreich.",
+    source_ref="document:1",
+)
+projection = result.projections[0]
+candidate = EmissionEngine().emit(projection)[0]
+
+assert candidate.relation == "capital_of"
+assert candidate.object_id == "geo:france"
+```
+
+The same representation is available as JSON from the command line:
+
+```bash
+python spl_frontend.py "Paris is the capital of France."
+```
+
+Every heuristic decision is exposed in `backend_trace`. Unknown constructions
+are not completed by a hidden language model; they remain parse failures,
+ambiguous projections, or structural violations.
+
 ---
 
 ## Key Concepts
@@ -114,9 +144,9 @@ ClaimNode             Alexandria canonical claim
 
 | Parameter | Value | Meaning |
 |-----------|-------|---------|
-| τ₀ | 0.50 | Minimum projection mass for any candidate |
+| τ₀ | 0.50 | Structural rejection threshold for illegal family mass |
 | τ₁ | 0.60 | Singular dominance threshold |
-| τ₂ | 0.25 | Minimum mass for top-k inclusion |
+| τ₂ | 0.25 | Normalized-entropy ceiling for singular emission |
 | τ₃ | 0.65 | Entropy threshold → AMBIGUOUS |
 | τ₄ | 0.40 | JSD threshold → BRANCH_CANDIDATE |
 
@@ -126,8 +156,10 @@ ClaimNode             Alexandria canonical claim
 
 ```
 spl.py                              Core SPL implementation (SemanticUnit,
-                                    SemanticProjection, EmissionEngine E0–E4,
+                                    tensor representation, EmissionEngine E0–E4,
                                     ClaimCandidateConverter)
+spl_frontend.py                     Offline M1 fragmentation, M2 distributional
+                                    type system, M3 typed relation projection
 spl_gateway.py                      Protocol-callable interface layer
                                     (emit_claim_nodes, hash_claim, GatewayEvent)
 WP2_Semantic_Projection_Layer.md    Full working paper (theory)
@@ -137,6 +169,7 @@ tests/
   test_jsd.py                       JSD unit tests
   test_spl_rules.py                 Emission rules E0–E4 + end-to-end pipeline
   test_gateway.py                   Gateway boundary tests
+  test_frontend.py                  Raw-text M1–M3 clean-room tests (DE/EN)
 
 examples/
   simple_claim.txt                  "Paris is the capital of France." (E1)
@@ -153,11 +186,17 @@ The reference implementation (`spl.py`) is also part of `hstre/Alexandria-Protok
 
 ## Status
 
-This is a **working paper** — the theory is stable, the implementation is complete, the NLP backend (embedding model integration) is pending.
+This is a **working paper**. M1--M5 now have an executable offline reference
+path. M1--M3 are deliberately a bounded rule baseline, not a claim of complete
+natural-language understanding. Their purpose is to make the intermediate
+representation, type uncertainty, relation-family filtering, illegal mass,
+and sparse relational tensor executable and auditable before any learned
+backend is introduced.
 
 Open items:
 - τ₂ calibration against gold-standard corpora
-- Production NLP backend (sentence-transformers / spaCy)
+- Corpus evaluation and lexicon/grammar coverage beyond the DE/EN baseline
+- Optional local learned backend behind the same explicit projection contract
 - Evaluation against benchmark plan (Section 4 / WP2 Appendix I)
 
 ---
